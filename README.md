@@ -1,0 +1,3 @@
+# exiftool-haskell
+
+WIP

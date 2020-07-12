@@ -1,0 +1,36 @@
+name:                exiftool
+version:             0.0.0.0
+synopsis:            Haskell bindings to ExifTool
+description:         Haskell bindings to the ExifTool command-line application
+                     "for reading, writing and editing meta information in a
+                     wide variety of files" (<https://exiftool.org>)
+homepage:            https://github.com/marhop/exiftool-haskell
+license:             MIT
+license-file:        LICENSE
+author:              Martin Hoppenheit
+maintainer:          martin@hoppenheit.info
+copyright:           2020 Martin Hoppenheit
+category:            Foreign
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     ExifTool
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , aeson
+                     , base64
+                     , bytestring
+                     , hashable
+                     , process
+                     , scientific
+                     , string-conversions
+                     , text
+                     , unordered-containers
+                     , vector
+
+source-repository head
+  type:     git
+  location: https://github.com/marhop/exiftool-haskell
