@@ -18,6 +18,7 @@ module ExifTool
     , stopExifTool
     , withExifTool
     , getMetadata
+    , setMetadata
     ) where
 
 import Control.Exception (bracket)
@@ -26,11 +27,17 @@ import Data.Aeson
     ( FromJSON(..)
     , FromJSONKey(..)
     , FromJSONKeyFunction(..)
+    , ToJSON(..)
+    , ToJSONKey(..)
+    , ToJSONKeyFunction(..)
     , eitherDecode
+    , encode
     )
+import Data.Aeson.Encoding.Internal (bool, list, scientific, text)
 import Data.ByteString (ByteString)
-import Data.ByteString.Base64 (decodeBase64)
-import Data.HashMap.Strict (HashMap)
+import Data.ByteString.Base64 (decodeBase64, encodeBase64)
+import Data.ByteString.Lazy (hPut)
+import Data.HashMap.Strict (HashMap, delete)
 import Data.Hashable (Hashable)
 import Data.Scientific (Scientific)
 import Data.String.Conversions (cs)
@@ -39,6 +46,7 @@ import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
 import GHC.Generics (Generic)
 import System.IO (Handle, hFlush)
+import System.IO.Temp (withSystemTempFile)
 import System.Process
     ( ProcessHandle
     , StdStream(CreatePipe)
@@ -75,20 +83,33 @@ data Tag = Tag
 
 instance FromJSON Tag where
     parseJSON (JSON.String x)
-        | Just t <- parseTag x = return t
+        | Just t <- readTag x = return t
     parseJSON x = fail $ "unexpected formatting of ExifTool tag: " <> show x
+
+instance FromJSONKey Tag where
+    fromJSONKey = FromJSONKeyTextParser $ parseJSON . JSON.String
+
+instance ToJSON Tag where
+    toJSON = JSON.String . showTag
+    toEncoding = text . showTag
+
+instance ToJSONKey Tag where
+    toJSONKey = ToJSONKeyText showTag (text . showTag)
 
 -- | Parse an ExifTool tag name of the form @family0:family1:name@ or the
 -- special case @SourceFile@.
-parseTag :: Text -> Maybe Tag
-parseTag t =
+readTag :: Text -> Maybe Tag
+readTag t =
     case splitOn ":" t of
         [f0, f1, n] -> Just $ Tag f0 f1 n
         ["SourceFile"] -> Just $ Tag "" "" "SourceFile"
         _ -> Nothing
 
-instance FromJSONKey Tag where
-    fromJSONKey = FromJSONKeyTextParser $ parseJSON . JSON.String
+-- | Format an ExifTool tag name in the form @family0:family1:name@ or the
+-- special case @SourceFile@.
+showTag :: Tag -> Text
+showTag (Tag "" "" "SourceFile") = "SourceFile"
+showTag (Tag f0 f1 n) = f0 <> ":" <> f1 <> ":" <> n
 
 -- | An ExifTool tag value, enclosed in a type wrapper.
 data Value
@@ -113,6 +134,18 @@ instance FromJSON Value where
     -- parseJSON (JSON.Object x) = Struct <$> sequence (fmap parseJSON x)
     parseJSON x = fail $ "error parsing ExifTool JSON output: " <> show x
 
+instance ToJSON Value where
+    toJSON (String x) = JSON.String x
+    toJSON (Binary x) = JSON.String $ "base64:" <> encodeBase64 x
+    toJSON (Number x) = JSON.Number x
+    toJSON (Bool x) = JSON.Bool x
+    toJSON (List xs) = JSON.Array . Vector.fromList $ map toJSON xs
+    toEncoding (String x) = text x
+    toEncoding (Binary x) = text $ "base64:" <> encodeBase64 x
+    toEncoding (Number x) = scientific x
+    toEncoding (Bool x) = bool x
+    toEncoding (List xs) = list toEncoding xs
+
 -- | Start an ExifTool instance.
 --
 -- Use 'stopExifTool' when done, or 'withExifTool' to combine both steps.
@@ -122,18 +155,7 @@ startExifTool = do
     return $ ET i o p
   where
     conf = (proc "exiftool" options) {std_in = CreatePipe, std_out = CreatePipe}
-    options =
-        [ "-stay_open"
-        , "True"
-        , "-@"
-        , "-"
-        , "-common_args"
-        , "-json"
-        , "-a"
-        , "-G:0:1"
-        , "-s"
-        , "-binary"
-        ]
+    options = ["-stay_open", "True", "-@", "-"]
 
 -- | Stop a running ExifTool instance.
 stopExifTool :: ExifTool -> IO ()
@@ -169,8 +191,22 @@ sendCommand (ET i o _) cmds = do
 getMetadata :: ExifTool                               -- ^ ExifTool instance
             -> Text                                   -- ^ file name
             -> IO (Either String (HashMap Tag Value)) -- ^ tag/value Map
-getMetadata et file = parseOutput <$> sendCommand et [file]
+getMetadata et file = parseOutput <$> sendCommand et (file : options)
   where
     parseOutput :: Text -> Either String (HashMap Tag Value)
     -- TODO Use total variant of head?
     parseOutput = fmap head . eitherDecode . cs
+    options = ["-json", "-a", "-G:0:1", "-s", "-binary"]
+
+-- | Write metadata to a file.
+setMetadata :: ExifTool          -- ^ ExifTool instance
+            -> HashMap Tag Value -- ^ tag/value Map
+            -> Text              -- ^ input file name
+            -> Text              -- ^ output file name
+            -> IO ()
+setMetadata et md infile outfile =
+    withSystemTempFile "exiftool.json" $ \mdfile h -> do
+        hPut h $ encode [delete (Tag "" "" "SourceFile") md]
+        hFlush h
+        _ <- sendCommand et [infile, "-json=" <> cs mdfile, "-o", outfile]
+        return ()
