@@ -55,6 +55,7 @@ import System.Process
     , proc
     , std_in
     , std_out
+    , std_err
     )
 
 -- | An ExifTool instance, initialized with 'startExifTool' and terminated with
@@ -62,6 +63,7 @@ import System.Process
 data ExifTool = ET
     { etIn   :: !Handle        -- ^ STDIN of this ExifTool process
     , etOut  :: !Handle        -- ^ STDOUT of this ExifTool process
+    , etErr  :: !Handle        -- ^ STDERR of this ExifTool process
     , etProc :: !ProcessHandle -- ^ process handle of this ExifTool process
     }
 
@@ -151,19 +153,21 @@ instance ToJSON Value where
 -- Use 'stopExifTool' when done, or 'withExifTool' to combine both steps.
 startExifTool :: IO ExifTool
 startExifTool = do
-    (Just i, Just o, _, p) <- createProcess conf
-    return $ ET i o p
+    (Just i, Just o, Just e, p) <- createProcess conf
+    return $ ET i o e p
   where
-    conf = (proc "exiftool" options) {std_in = CreatePipe, std_out = CreatePipe}
+    conf =
+        (proc "exiftool" options)
+            {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}
     options = ["-stay_open", "True", "-@", "-"]
 
 -- | Stop a running ExifTool instance.
 stopExifTool :: ExifTool -> IO ()
-stopExifTool (ET i o p) = do
+stopExifTool (ET i o e p) = do
     hPutStrLn i "-stay_open"
     hPutStrLn i "False"
     hFlush i
-    cleanupProcess (Just i, Just o, Nothing, p)
+    cleanupProcess (Just i, Just o, Just e, p)
 
 -- | Start an ExifTool instance, do something with it, then stop it.
 withExifTool :: (ExifTool -> IO a) -> IO a
@@ -174,7 +178,7 @@ withExifTool = bracket startExifTool stopExifTool
 --
 -- The final @-execute@ argument is added automatically.
 sendCommand :: ExifTool -> [Text] -> IO Text
-sendCommand (ET i o _) cmds = do
+sendCommand (ET i o _ _) cmds = do
     mapM_ (hPutStrLn i) cmds
     hPutStrLn i "-execute"
     hFlush i
