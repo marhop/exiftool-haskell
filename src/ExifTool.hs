@@ -34,6 +34,7 @@ import Data.Aeson
     , encode
     )
 import Data.Aeson.Encoding.Internal (bool, list, scientific, text)
+import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import Data.ByteString.Lazy (hPut)
@@ -45,7 +46,7 @@ import Data.Text (Text, isPrefixOf, splitOn, stripPrefix)
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
 import GHC.Generics (Generic)
-import System.IO (Handle, hFlush)
+import System.IO (Handle, hFlush, hWaitForInput)
 import System.IO.Temp (withSystemTempFile)
 import System.Process
     ( ProcessHandle
@@ -53,9 +54,9 @@ import System.Process
     , cleanupProcess
     , createProcess
     , proc
+    , std_err
     , std_in
     , std_out
-    , std_err
     )
 
 -- | An ExifTool instance, initialized with 'startExifTool' and terminated with
@@ -174,43 +175,63 @@ withExifTool :: (ExifTool -> IO a) -> IO a
 withExifTool = bracket startExifTool stopExifTool
 
 -- | Send a sequence of command-line arguments to a running ExifTool instance
--- and return the corresponding output.
+-- and return the corresponding output/errors.
 --
 -- The final @-execute@ argument is added automatically.
-sendCommand :: ExifTool -> [Text] -> IO Text
-sendCommand (ET i o _ _) cmds = do
+sendCommand :: ExifTool -> [Text] -> IO (Either Text Text)
+sendCommand (ET i o e _) cmds = do
     mapM_ (hPutStrLn i) cmds
     hPutStrLn i "-execute"
     hFlush i
-    readOutput o ""
+    -- Do not switch the order of readOut/readErr lest we miss errors!
+    out <- readOut o ""
+    err <- readErr e ""
+    return $
+        if isError err
+            then Left err
+            else Right out
   where
-    readOutput :: Handle -> Text -> IO Text
-    readOutput h acc = do
+    -- | Read from handle up to the string @{ready}@.
+    readOut :: Handle -> Text -> IO Text
+    readOut h acc = do
         l <- hGetLine h
         if "{ready}" `isPrefixOf` l
             then return acc
-            else readOutput h (acc <> l)
+            else readOut h (acc <> l)
+    -- | Read /currently/ available data from handle, don't wait for more.
+    readErr :: Handle -> Text -> IO Text
+    readErr h acc = do
+        hasMore <- hWaitForInput h 0
+        if not hasMore
+            then return acc
+            else do
+                l <- hGetLine h
+                readErr h (acc <> l)
+    -- | Make sure an error string actually counts as error.
+    isError :: Text -> Bool
+    isError t = not $ elem t ["", "    1 image files created"]
 
 -- | Read all metadata from a file.
-getMetadata :: ExifTool                               -- ^ ExifTool instance
-            -> Text                                   -- ^ file name
-            -> IO (Either String (HashMap Tag Value)) -- ^ tag/value Map
-getMetadata et file = parseOutput <$> sendCommand et (file : options)
+getMetadata :: ExifTool                             -- ^ ExifTool instance
+            -> Text                                 -- ^ file name
+            -> IO (Either Text (HashMap Tag Value)) -- ^ tag/value Map
+getMetadata et file = do
+    result <- sendCommand et (file : options)
+    return $ result >>= parseOutput
   where
-    parseOutput :: Text -> Either String (HashMap Tag Value)
-    -- TODO Use total variant of head?
-    parseOutput = fmap head . eitherDecode . cs
+    parseOutput :: Text -> Either Text (HashMap Tag Value)
+    parseOutput = bimap cs head . eitherDecode . cs
     options = ["-json", "-a", "-G:0:1", "-s", "-binary"]
 
 -- | Write metadata to a file.
-setMetadata :: ExifTool          -- ^ ExifTool instance
-            -> HashMap Tag Value -- ^ tag/value Map
-            -> Text              -- ^ input file name
-            -> Text              -- ^ output file name
-            -> IO ()
+setMetadata :: ExifTool            -- ^ ExifTool instance
+            -> HashMap Tag Value   -- ^ tag/value Map
+            -> Text                -- ^ input file name
+            -> Text                -- ^ output file name
+            -> IO (Either Text ())
 setMetadata et md infile outfile =
     withSystemTempFile "exiftool.json" $ \mdfile h -> do
         hPut h $ encode [delete (Tag "" "" "SourceFile") md]
         hFlush h
-        _ <- sendCommand et [infile, "-json=" <> cs mdfile, "-o", outfile]
-        return ()
+        result <- sendCommand et [infile, "-json=" <> cs mdfile, "-o", outfile]
+        return $ const () <$> result
