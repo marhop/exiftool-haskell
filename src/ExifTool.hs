@@ -43,7 +43,8 @@ import Data.HashMap.Strict (HashMap, delete)
 import Data.Hashable (Hashable)
 import Data.Scientific (Scientific)
 import Data.String.Conversions (cs)
-import Data.Text (Text, isPrefixOf, splitOn, stripPrefix)
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
 import GHC.Generics (Generic)
@@ -107,16 +108,14 @@ instance ToJSONKey Tag where
 -- special case @SourceFile@.
 readTag :: Text -> Maybe Tag
 readTag t =
-    case splitOn ":" t of
+    case T.splitOn ":" t of
         [f0, f1, n] -> Just $ Tag f0 f1 n
         ["SourceFile"] -> Just $ Tag "" "" "SourceFile"
         _ -> Nothing
 
--- | Format an ExifTool tag name in the form @family0:family1:name@ or the
--- special case @SourceFile@.
+-- | Format an ExifTool tag name in the form @family0:family1:name@.
 showTag :: Tag -> Text
-showTag (Tag "" "" "SourceFile") = "SourceFile"
-showTag (Tag f0 f1 n) = f0 <> ":" <> f1 <> ":" <> n
+showTag (Tag f0 f1 n) = T.intercalate ":" $ filter (not . T.null) [f0, f1, n]
 
 -- | An ExifTool tag value, enclosed in a type wrapper.
 data Value
@@ -130,7 +129,7 @@ data Value
 
 instance FromJSON Value where
     parseJSON (JSON.String x)
-        | Just b <- stripPrefix "base64:" x =
+        | Just b <- T.stripPrefix "base64:" x =
             either (fail . cs) (return . Binary) (decodeBase64 $ cs b)
         | otherwise = return $ String x
     parseJSON (JSON.Number x) = return $ Number x
@@ -199,7 +198,7 @@ sendCommand (ET i o e _) cmds = do
     readOut :: Handle -> Text -> IO Text
     readOut h acc = do
         l <- hGetLine h
-        if "{ready}" `isPrefixOf` l
+        if "{ready}" `T.isPrefixOf` l
             then return acc
             else readOut h (acc <> l)
     -- | Read /currently/ available data from handle, don't wait for more.
