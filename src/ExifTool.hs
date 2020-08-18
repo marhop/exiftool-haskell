@@ -12,6 +12,7 @@
 
 module ExifTool
     ( ExifTool
+    , Metadata
     , Tag(..)
     , Value(..)
     , startExifTool
@@ -67,6 +68,9 @@ data ExifTool = ET
     , etErr  :: !Handle        -- ^ STDERR of this ExifTool process
     , etProc :: !ProcessHandle -- ^ process handle of this ExifTool process
     }
+
+-- | A set of ExifTool tag/value pairs.
+type Metadata = HashMap Tag Value
 
 -- | An ExifTool tag name, consisting of three components:
 --
@@ -212,20 +216,20 @@ sendCommand (ET i o e _) cmds = do
     isError t = not $ elem t ["", "    1 image files created"]
 
 -- | Read all metadata from a file.
-getMetadata :: ExifTool                             -- ^ ExifTool instance
-            -> Text                                 -- ^ file name
-            -> IO (Either Text (HashMap Tag Value)) -- ^ tag/value Map
+getMetadata :: ExifTool                  -- ^ ExifTool instance
+            -> Text                      -- ^ file name
+            -> IO (Either Text Metadata) -- ^ tag/value Map
 getMetadata et file = do
     result <- sendCommand et (file : options)
     return $ result >>= parseOutput
   where
-    parseOutput :: Text -> Either Text (HashMap Tag Value)
+    parseOutput :: Text -> Either Text Metadata
     parseOutput = bimap cs head . eitherDecode . cs
     options = ["-json", "-a", "-G:0:1", "-s", "-binary"]
 
 -- | Write metadata to a file.
 setMetadata :: ExifTool            -- ^ ExifTool instance
-            -> HashMap Tag Value   -- ^ tag/value Map
+            -> Metadata            -- ^ tag/value Map
             -> Text                -- ^ input file name
             -> Text                -- ^ output file name
             -> IO (Either Text ())
