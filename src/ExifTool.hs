@@ -104,16 +104,18 @@ instance ToJSON Tag where
 instance ToJSONKey Tag where
     toJSONKey = ToJSONKeyText showTag (text . showTag)
 
--- | Parse an ExifTool tag name of the form @family0:family1:name@ or the
--- special case @SourceFile@.
+-- | Parse an ExifTool tag name of the form @family0:family1:name@,
+-- @family0:name@ or @name@ (but /not/ @family1:name@).
 readTag :: Text -> Maybe Tag
 readTag t =
     case T.splitOn ":" t of
         [f0, f1, n] -> Just $ Tag f0 f1 n
-        ["SourceFile"] -> Just $ Tag "" "" "SourceFile"
+        [f0, n] -> Just $ Tag f0 "" n
+        [n] -> Just $ Tag "" "" n
         _ -> Nothing
 
--- | Format an ExifTool tag name in the form @family0:family1:name@.
+-- | Format an ExifTool tag name in the form @family0:family1:name@,
+-- @family0:name@, @family1:name@ or @name@.
 showTag :: Tag -> Text
 showTag (Tag f0 f1 n) = T.intercalate ":" $ filter (not . T.null) [f0, f1, n]
 
