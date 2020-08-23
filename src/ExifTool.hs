@@ -20,6 +20,7 @@ module ExifTool
     , withExifTool
     , getMetadata
     , setMetadata
+    , filterByTag
     ) where
 
 import Control.Exception (bracket)
@@ -39,7 +40,7 @@ import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import Data.ByteString.Lazy (hPut)
-import Data.HashMap.Strict (HashMap, delete)
+import Data.HashMap.Strict (HashMap, delete, filterWithKey)
 import Data.Hashable (Hashable)
 import Data.Scientific (Scientific)
 import Data.String.Conversions (cs)
@@ -240,3 +241,7 @@ setMetadata et md infile outfile =
         hFlush h
         result <- sendCommand et [infile, "-json=" <> cs mdfile, "-o", outfile]
         return $ const () <$> result
+
+-- | Filter metadata by tag name.
+filterByTag :: (Tag -> Bool) -> Metadata -> Metadata
+filterByTag p m = filterWithKey (\t _ -> p t) m
