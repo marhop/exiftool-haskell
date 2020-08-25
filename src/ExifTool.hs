@@ -21,6 +21,7 @@ module ExifTool
     , getMetadata
     , setMetadata
     , filterByTag
+    , (~~)
     ) where
 
 import Control.Exception (bracket)
@@ -245,3 +246,23 @@ setMetadata et md infile outfile =
 -- | Filter metadata by tag name.
 filterByTag :: (Tag -> Bool) -> Metadata -> Metadata
 filterByTag p m = filterWithKey (\t _ -> p t) m
+
+-- | Filter metadata by fuzzy tag name matching. Tag names are matched ignoring
+-- case, and empty components of the given tag name are considered wildcards.
+-- Examples:
+--
+-- * @m ~~ Tag "EXIF" "IFD0" "XResolution"@ matches exactly the given tag name
+--   (ignoring case)
+-- * @m ~~ Tag "exif" "" "xresolution"@ matches all EXIF tags with name
+--   xresolution (ignoring case), including @EXIF:IFD0:XResolution@ and
+--   @EXIF:IFD1:XResolution@
+-- * @m ~~ Tag "XMP" "" ""@ matches all XMP tags
+(~~) :: Metadata -> Tag -> Metadata
+(~~) m t = filterByTag (match t) m
+  where
+    match :: Tag -> Tag -> Bool
+    match (Tag f0 f1 n) (Tag f0' f1' n') =
+        match' f0 f0' && match' f1 f1' && match' n n'
+    match' :: Text -> Text -> Bool
+    match' "" _ = True -- But not in reverse!
+    match' x x' = T.toCaseFold x == T.toCaseFold x'
