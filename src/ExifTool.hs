@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module     : ExifTool
@@ -20,6 +21,7 @@ module ExifTool
     , withExifTool
     , getMetadata
     , setMetadata
+    , deleteMetadata
     , filterByTag
     , (~~)
     ) where
@@ -41,7 +43,7 @@ import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import Data.ByteString.Lazy (hPut)
-import Data.HashMap.Strict (HashMap, delete, filterWithKey)
+import Data.HashMap.Strict (HashMap, delete, filterWithKey, fromList)
 import Data.Hashable (Hashable)
 import Data.Scientific (Scientific)
 import Data.String.Conversions (cs)
@@ -240,8 +242,17 @@ setMetadata et md infile outfile =
     withSystemTempFile "exiftool.json" $ \mdfile h -> do
         hPut h $ encode [delete (Tag "" "" "SourceFile") md]
         hFlush h
-        result <- sendCommand et [infile, "-json=" <> cs mdfile, "-o", outfile]
+        result <-
+            sendCommand et [infile, "-json=" <> cs mdfile, "-f", "-o", outfile]
         return $ const () <$> result
+
+-- | Delete metadata from a file.
+deleteMetadata :: ExifTool            -- ^ ExifTool instance
+               -> [Tag]               -- ^ tags to be deleted
+               -> Text                -- ^ input file name
+               -> Text                -- ^ output file name
+               -> IO (Either Text ())
+deleteMetadata et ts = setMetadata et (fromList $ fmap (, String "-") ts)
 
 -- | Filter metadata by tag name.
 filterByTag :: (Tag -> Bool) -> Metadata -> Metadata
