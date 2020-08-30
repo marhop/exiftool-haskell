@@ -233,24 +233,27 @@ getMetadata et file = do
     options = ["-json", "-a", "-G:0:1", "-s", "-binary"]
 
 -- | Write metadata to a file.
+--
+-- The file is modified in place. Make sure you have the necessary backups!
 setMetadata :: ExifTool            -- ^ ExifTool instance
             -> Metadata            -- ^ tag/value Map
-            -> Text                -- ^ input file name
-            -> Text                -- ^ output file name
+            -> Text                -- ^ file name
             -> IO (Either Text ())
-setMetadata et md infile outfile =
-    withSystemTempFile "exiftool.json" $ \mdfile h -> do
-        hPut h $ encode [delete (Tag "" "" "SourceFile") md]
+setMetadata et m file =
+    withSystemTempFile "exiftool.json" $ \metafile h -> do
+        hPut h $ encode [delete (Tag "" "" "SourceFile") m]
         hFlush h
-        result <-
-            sendCommand et [infile, "-json=" <> cs mdfile, "-f", "-o", outfile]
+        result <- sendCommand et (file : "-json=" <> cs metafile : options)
         return $ const () <$> result
+  where
+    options = ["-overwrite_original", "-f"]
 
 -- | Delete metadata from a file.
+--
+-- The file is modified in place. Make sure you have the necessary backups!
 deleteMetadata :: ExifTool            -- ^ ExifTool instance
                -> [Tag]               -- ^ tags to be deleted
-               -> Text                -- ^ input file name
-               -> Text                -- ^ output file name
+               -> Text                -- ^ file name
                -> IO (Either Text ())
 deleteMetadata et ts = setMetadata et (fromList $ fmap (, String "-") ts)
 
