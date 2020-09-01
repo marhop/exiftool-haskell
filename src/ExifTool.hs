@@ -19,9 +19,12 @@ module ExifTool
     , startExifTool
     , stopExifTool
     , withExifTool
-    , getMetadata
-    , setMetadata
-    , deleteMetadata
+    , getMeta
+    , getMetaEither
+    , setMeta
+    , setMetaEither
+    , deleteMeta
+    , deleteMetaEither
     , filterByTag
     , (~~)
     ) where
@@ -220,11 +223,19 @@ sendCommand (ET i o e _) cmds = do
     isError :: Text -> Bool
     isError t = not $ elem t ["", "    1 image files created"]
 
--- | Read all metadata from a file.
-getMetadata :: ExifTool                  -- ^ ExifTool instance
-            -> Text                      -- ^ file name
-            -> IO (Either Text Metadata) -- ^ tag/value Map
-getMetadata et file = do
+-- | Read all metadata from a file, with ExifTool errors leading to runtime
+-- errors. (Use 'getMetaEither' instead if you would rather intercept them.)
+getMeta :: ExifTool    -- ^ ExifTool instance
+        -> Text        -- ^ file name
+        -> IO Metadata -- ^ tag/value Map
+getMeta et file = eitherError <$> getMetaEither et file
+
+-- | Read all metadata from a file, with ExifTool errors returned as Left
+-- values.
+getMetaEither :: ExifTool                  -- ^ ExifTool instance
+              -> Text                      -- ^ file name
+              -> IO (Either Text Metadata) -- ^ tag/value Map
+getMetaEither et file = do
     result <- sendCommand et (file : options)
     return $ result >>= parseOutput
   where
@@ -232,14 +243,24 @@ getMetadata et file = do
     parseOutput = bimap cs head . eitherDecode . cs
     options = ["-json", "-a", "-G:0:1", "-s", "-binary"]
 
--- | Write metadata to a file.
+-- | Write metadata to a file, with ExifTool errors leading to runtime errors.
+-- (Use 'setMetaEither' instead if you would rather intercept them.)
 --
 -- The file is modified in place. Make sure you have the necessary backups!
-setMetadata :: ExifTool            -- ^ ExifTool instance
-            -> Metadata            -- ^ tag/value Map
-            -> Text                -- ^ file name
-            -> IO (Either Text ())
-setMetadata et m file =
+setMeta :: ExifTool -- ^ ExifTool instance
+        -> Metadata -- ^ tag/value Map
+        -> Text     -- ^ file name
+        -> IO ()
+setMeta et m file = eitherError <$> setMetaEither et m file
+
+-- | Write metadata to a file, with ExifTool errors returned as Left values.
+--
+-- The file is modified in place. Make sure you have the necessary backups!
+setMetaEither :: ExifTool            -- ^ ExifTool instance
+              -> Metadata            -- ^ tag/value Map
+              -> Text                -- ^ file name
+              -> IO (Either Text ())
+setMetaEither et m file =
     withSystemTempFile "exiftool.json" $ \metafile h -> do
         hPut h $ encode [delete (Tag "" "" "SourceFile") m]
         hFlush h
@@ -248,14 +269,24 @@ setMetadata et m file =
   where
     options = ["-overwrite_original", "-f"]
 
--- | Delete metadata from a file.
+-- | Delete metadata from a file, with ExifTool errors leading to runtime
+-- errors. (Use 'deleteMetaEither' instead if you would rather intercept them.)
 --
 -- The file is modified in place. Make sure you have the necessary backups!
-deleteMetadata :: ExifTool            -- ^ ExifTool instance
-               -> [Tag]               -- ^ tags to be deleted
-               -> Text                -- ^ file name
-               -> IO (Either Text ())
-deleteMetadata et ts = setMetadata et (fromList $ fmap (, String "-") ts)
+deleteMeta :: ExifTool -- ^ ExifTool instance
+           -> [Tag]    -- ^ tags to be deleted
+           -> Text     -- ^ file name
+           -> IO ()
+deleteMeta et ts file = eitherError <$> deleteMetaEither et ts file
+
+-- | Delete metadata from a file, with ExifTool errors returned as Left values.
+--
+-- The file is modified in place. Make sure you have the necessary backups!
+deleteMetaEither :: ExifTool            -- ^ ExifTool instance
+                 -> [Tag]               -- ^ tags to be deleted
+                 -> Text                -- ^ file name
+                 -> IO (Either Text ())
+deleteMetaEither et ts = setMetaEither et (fromList $ fmap (, String "-") ts)
 
 -- | Filter metadata by tag name.
 filterByTag :: (Tag -> Bool) -> Metadata -> Metadata
@@ -280,3 +311,7 @@ filterByTag p m = filterWithKey (\t _ -> p t) m
     match' :: Text -> Text -> Bool
     match' "" _ = True -- But not in reverse!
     match' x x' = T.toCaseFold x == T.toCaseFold x'
+
+-- | Extract content from Right or throw error.
+eitherError :: Either Text a -> a
+eitherError = either (error . cs) id
