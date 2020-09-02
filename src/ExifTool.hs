@@ -30,6 +30,7 @@ module ExifTool
     ) where
 
 import Control.Exception (bracket)
+import Control.Monad (void)
 import qualified Data.Aeson as JSON
 import Data.Aeson
     ( FromJSON(..)
@@ -55,7 +56,7 @@ import qualified Data.Text as T
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
 import GHC.Generics (Generic)
-import System.IO (Handle, hFlush, hWaitForInput)
+import System.IO (Handle, hFlush, hReady)
 import System.IO.Temp (withSystemTempFile)
 import System.Process
     ( ProcessHandle
@@ -213,7 +214,7 @@ sendCommand (ET i o e _) cmds = do
     -- | Read /currently/ available data from handle, don't wait for more.
     readErr :: Handle -> Text -> IO Text
     readErr h acc = do
-        hasMore <- hWaitForInput h 0
+        hasMore <- hReady h
         if not hasMore
             then return acc
             else do
@@ -221,7 +222,7 @@ sendCommand (ET i o e _) cmds = do
                 readErr h (acc <> l)
     -- | Make sure an error string actually counts as error.
     isError :: Text -> Bool
-    isError t = not $ elem t ["", "    1 image files created"]
+    isError t = t `notElem` ["", "    1 image files created"]
 
 -- | Read all metadata from a file, with ExifTool errors leading to runtime
 -- errors. (Use 'getMetaEither' instead if you would rather intercept them.)
@@ -264,8 +265,7 @@ setMetaEither et m file =
     withSystemTempFile "exiftool.json" $ \metafile h -> do
         hPut h $ encode [delete (Tag "" "" "SourceFile") m]
         hFlush h
-        result <- sendCommand et (file : "-json=" <> cs metafile : options)
-        return $ const () <$> result
+        void <$> sendCommand et (file : "-json=" <> cs metafile : options)
   where
     options = ["-overwrite_original", "-f"]
 
@@ -290,7 +290,7 @@ deleteMetaEither et ts = setMetaEither et (fromList $ fmap (, String "-") ts)
 
 -- | Filter metadata by tag name.
 filterByTag :: (Tag -> Bool) -> Metadata -> Metadata
-filterByTag p m = filterWithKey (\t _ -> p t) m
+filterByTag p = filterWithKey (\t _ -> p t)
 
 -- | Filter metadata by fuzzy tag name matching. Tag names are matched ignoring
 -- case, and empty components of the given tag name are considered wildcards.
