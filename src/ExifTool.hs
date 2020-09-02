@@ -222,7 +222,7 @@ sendCommand (ET i o e _) cmds = do
                 readErr h (acc <> l)
     -- | Make sure an error string actually counts as error.
     isError :: Text -> Bool
-    isError t = t `notElem` ["", "    1 image files created"]
+    isError t = t `notElem` ["", "    1 image files updated"]
 
 -- | Read all metadata from a file, with ExifTool errors leading to runtime
 -- errors. (Use 'getMetaEither' instead if you would rather intercept them.)
