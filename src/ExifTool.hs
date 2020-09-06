@@ -9,22 +9,61 @@
 -- License    : MIT
 -- Maintainer : martin@hoppenheit.info
 --
--- TODO Module documentation, including complete usage example.
+-- This module contains bindings to the [ExifTool](https://exiftool.org)
+-- command-line application that enable reading, writing and deleting metadata
+-- in various file formats. Here's a short code example, the details are
+-- explained below.
+--
+-- > {-# LANGUAGE OverloadedStrings #-}
+-- >
+-- > import ExifTool
+-- > import Data.HashMap.Strict ((!?), fromList)
+-- >
+-- > example :: IO ()
+-- > example =
+-- >     withExifTool $ \et -> do
+-- >         m <- getMeta et "a.jpg"
+-- >         print $ m !? Tag "EXIF" "ExifIFD" "DateTimeOriginal"
+-- >         print $ m ~~ Tag "EXIF" "" "XResolution"
+-- >         print $ m ~~ Tag "XMP" "" ""
+-- >         setMeta et (fromList [(Tag "XMP" "XMP-dc" "Description", String "...")]) "a.jpg"
+-- >         deleteMeta et [Tag "XMP" "XMP-dc" "Description"] "a.jpg"
 
 module ExifTool
-    ( ExifTool
-    , Metadata
-    , Tag(..)
-    , Value(..)
+    ( -- * Running an ExifTool instance
+      --
+      -- | Most functions in this module interact with an ExifTool instance
+      -- i.e., a running ExifTool process represented by the 'ExifTool' data
+      -- type. The easiest way to obtain an instance is the 'withExifTool'
+      -- function that takes care of starting and stopping the process.
+      ExifTool
     , startExifTool
     , stopExifTool
     , withExifTool
+      -- * Reading and writing metadata
+      --
+      -- | The ExifTool instance can then be used to read, write or delete
+      -- metadata in a file with the respective functions. These come in two
+      -- variants, one that throws runtime errors when the ExifTool process
+      -- returns error messages and one that instead produces Either values.
+      -- Choose those that best fit your use case.
     , getMeta
-    , getMetaEither
     , setMeta
-    , setMetaEither
     , deleteMeta
+    , getMetaEither
+    , setMetaEither
     , deleteMetaEither
+      -- * Data types and utility functions
+      --
+      -- | Metadata is represented by a 'Data.HashMap.Strict.HashMap' of
+      -- 'Tag'/'Value' pairs (with alias 'Metadata'), so it is advisable to
+      -- import some functions like 'Data.HashMap.Strict.lookup' or
+      -- 'Data.HashMap.Strict.!?' from the "Data.HashMap.Strict" module. The
+      -- ExifTool module defines additional utility functions that make working
+      -- with Metadata easier.
+    , Metadata
+    , Tag(..)
+    , Value(..)
     , filterByTag
     , (~~)
     ) where
@@ -87,10 +126,11 @@ type Metadata = HashMap Tag Value
 -- 2. The family 1 tag group (specific location) e.g., @IFD0@ or @XMP-dc@.
 -- 3. The actual tag name e.g., @XResolution@ or @Description@.
 --
--- Example: @Tag "EXIF" "IFD0" "XResolution"@ corresponds to the ExifTool tag
--- name @EXIF:IFD0:XResolution@.
+-- Example: @Tag \"EXIF\" \"IFD0\" \"XResolution\"@ corresponds to the ExifTool
+-- tag name @EXIF:IFD0:XResolution@.
 --
--- See <https://exiftool.org/#groups> for a list of tag groups.
+-- See <https://exiftool.org/#groups> for a list of tag groups, or use the '~~'
+-- operator to find the exact tag names in ghci.
 data Tag = Tag
     { tagFamily0 :: !Text -- ^ family 0 tag group
     , tagFamily1 :: !Text -- ^ family 1 tag group
@@ -134,7 +174,7 @@ data Value
     | Number !Scientific
     | Bool   !Bool
     | List   ![Value]
-    -- | Struct (Map Text Value)
+    -- Struct (Map Text Value)
     deriving (Show, Eq)
 
 instance FromJSON Value where
@@ -162,9 +202,8 @@ instance ToJSON Value where
     toEncoding (Bool x) = bool x
     toEncoding (List xs) = list toEncoding xs
 
--- | Start an ExifTool instance.
---
--- Use 'stopExifTool' when done, or 'withExifTool' to combine both steps.
+-- | Start an ExifTool instance. Use 'stopExifTool' when done, or 'withExifTool'
+-- to combine both steps.
 startExifTool :: IO ExifTool
 startExifTool = do
     (Just i, Just o, Just e, p) <- createProcess conf
@@ -245,18 +284,16 @@ getMetaEither et file = do
     options = ["-json", "-a", "-G:0:1", "-s", "-binary"]
 
 -- | Write metadata to a file, with ExifTool errors leading to runtime errors.
--- (Use 'setMetaEither' instead if you would rather intercept them.)
---
--- The file is modified in place. Make sure you have the necessary backups!
+-- (Use 'setMetaEither' instead if you would rather intercept them.) The file is
+-- modified in place. Make sure you have the necessary backups!
 setMeta :: ExifTool -- ^ ExifTool instance
         -> Metadata -- ^ tag/value Map
         -> Text     -- ^ file name
         -> IO ()
 setMeta et m file = eitherError <$> setMetaEither et m file
 
--- | Write metadata to a file, with ExifTool errors returned as Left values.
---
--- The file is modified in place. Make sure you have the necessary backups!
+-- | Write metadata to a file, with ExifTool errors returned as Left values. The
+-- file is modified in place. Make sure you have the necessary backups!
 setMetaEither :: ExifTool            -- ^ ExifTool instance
               -> Metadata            -- ^ tag/value Map
               -> Text                -- ^ file name
@@ -271,7 +308,6 @@ setMetaEither et m file =
 
 -- | Delete metadata from a file, with ExifTool errors leading to runtime
 -- errors. (Use 'deleteMetaEither' instead if you would rather intercept them.)
---
 -- The file is modified in place. Make sure you have the necessary backups!
 deleteMeta :: ExifTool -- ^ ExifTool instance
            -> [Tag]    -- ^ tags to be deleted
@@ -280,7 +316,6 @@ deleteMeta :: ExifTool -- ^ ExifTool instance
 deleteMeta et ts file = eitherError <$> deleteMetaEither et ts file
 
 -- | Delete metadata from a file, with ExifTool errors returned as Left values.
---
 -- The file is modified in place. Make sure you have the necessary backups!
 deleteMetaEither :: ExifTool            -- ^ ExifTool instance
                  -> [Tag]               -- ^ tags to be deleted
@@ -296,12 +331,14 @@ filterByTag p = filterWithKey (\t _ -> p t)
 -- case, and empty components of the given tag name are considered wildcards.
 -- Examples:
 --
--- * @m ~~ Tag "EXIF" "IFD0" "XResolution"@ matches exactly the given tag name
---   (ignoring case)
+-- * @m ~~ Tag \"EXIF\" \"IFD0\" \"XResolution\"@ matches exactly the given tag
+--   name (ignoring case)
 -- * @m ~~ Tag "exif" "" "xresolution"@ matches all EXIF tags with name
 --   xresolution (ignoring case), including @EXIF:IFD0:XResolution@ and
 --   @EXIF:IFD1:XResolution@
--- * @m ~~ Tag "XMP" "" ""@ matches all XMP tags
+-- * @m ~~ Tag \"XMP\" "" ""@ matches all XMP tags
+--
+-- Hint: This operator is useful to find exact tag names in ghci.
 (~~) :: Metadata -> Tag -> Metadata
 (~~) m t = filterByTag (match t) m
   where

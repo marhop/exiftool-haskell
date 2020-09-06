@@ -1,9 +1,9 @@
 name:                exiftool
 version:             0.0.0.0
 synopsis:            Haskell bindings to ExifTool
-description:         Haskell bindings to the ExifTool command-line application
-                     "for reading, writing and editing meta information in a
-                     wide variety of files" (<https://exiftool.org>)
+description:         Haskell bindings to the [ExifTool](https://exiftool.org)
+                     command-line application that enable reading, writing and
+                     deleting metadata in various file formats.
 homepage:            https://github.com/marhop/exiftool-haskell
 license:             MIT
 license-file:        LICENSE
