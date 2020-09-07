@@ -15,19 +15,24 @@
 -- explained below.
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
+-- > {-# LANGUAGE OverloadedLists #-}
 -- >
 -- > import ExifTool
--- > import Data.HashMap.Strict ((!?), fromList)
+-- > import Data.HashMap.Strict ((!?))
 -- >
 -- > example :: IO ()
 -- > example =
 -- >     withExifTool $ \et -> do
+-- >         -- Read metadata, with exact (!?) and fuzzy (~~) tag lookup.
 -- >         m <- getMeta et "a.jpg"
 -- >         print $ m !? Tag "EXIF" "ExifIFD" "DateTimeOriginal"
 -- >         print $ m ~~ Tag "EXIF" "" "XResolution"
 -- >         print $ m ~~ Tag "XMP" "" ""
--- >         setMeta et (fromList [(Tag "XMP" "XMP-dc" "Description", String "...")]) "a.jpg"
+-- >         -- Write and delete metadata.
+-- >         setMeta et [(Tag "XMP" "XMP-dc" "Description", String "...")] "a.jpg"
 -- >         deleteMeta et [Tag "XMP" "XMP-dc" "Description"] "a.jpg"
+--
+-- Note that this module expects the @exiftool@ binary to be in your PATH.
 
 module ExifTool
     ( -- * Running an ExifTool instance
@@ -129,8 +134,11 @@ type Metadata = HashMap Tag Value
 -- Example: @Tag \"EXIF\" \"IFD0\" \"XResolution\"@ corresponds to the ExifTool
 -- tag name @EXIF:IFD0:XResolution@.
 --
--- See <https://exiftool.org/#groups> for a list of tag groups, or use the '~~'
--- operator to find the exact tag names in ghci.
+-- During development, there are several ways to find the exact name of a tag:
+--
+-- * See <https://exiftool.org/#groups> for a list of tag groups.
+-- * Run something like @exiftool -s -a -G:0:1@.
+-- * Use the '~~' operator in ghci.
 data Tag = Tag
     { tagFamily0 :: !Text -- ^ family 0 tag group
     , tagFamily1 :: !Text -- ^ family 1 tag group
