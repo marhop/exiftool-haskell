@@ -346,12 +346,12 @@ filterByTag p = filterWithKey (\t _ -> p t)
 --   @EXIF:IFD1:XResolution@
 -- * @m ~~ Tag \"XMP\" "" ""@ matches all XMP tags
 --
--- Note that this operator has lower precedence than '<>', so @m <> m' ~~ t ==
--- (m <> m') ~~ t@.
+-- Note that @~~@ has higher precedence than '<>', so @m ~~ t <> m ~~ t' == (m
+-- ~~ t) <> (m ~~ t')@ which makes combining filters easy.
 --
 -- Hint: This operator is useful to find exact tag names in ghci.
 (~~) :: Metadata -> Tag -> Metadata
-infixl 5 ~~
+infixl 8 ~~
 (~~) m t = filterByTag (match t) m
   where
     match :: Tag -> Tag -> Bool
