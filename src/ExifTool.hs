@@ -116,11 +116,10 @@ import System.Process
 -- | An ExifTool instance, initialized with 'startExifTool' and terminated with
 -- 'stopExifTool'.
 data ExifTool = ET
-    { etIn   :: !Handle        -- ^ STDIN of this ExifTool process
-    , etOut  :: !Handle        -- ^ STDOUT of this ExifTool process
-    , etErr  :: !Handle        -- ^ STDERR of this ExifTool process
-    , etProc :: !ProcessHandle -- ^ process handle of this ExifTool process
-    }
+    !Handle        -- ^ STDIN of this ExifTool process
+    !Handle        -- ^ STDOUT of this ExifTool process
+    !Handle        -- ^ STDERR of this ExifTool process
+    !ProcessHandle -- ^ process handle of this ExifTool process
 
 -- | A set of ExifTool tag/value pairs.
 type Metadata = HashMap Tag Value

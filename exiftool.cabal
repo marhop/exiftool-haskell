@@ -19,6 +19,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     ExifTool
   default-language:    Haskell2010
+  ghc-options:         -Wall
   build-depends:       base                 >= 4.7 && < 5
                      , aeson                >= 1.5.4 && < 1.6
                      , base64               >= 0.4.2 && < 0.5
