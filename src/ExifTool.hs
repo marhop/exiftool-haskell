@@ -288,7 +288,7 @@ getMetaEither et file = do
   where
     parseOutput :: Text -> Either Text Metadata
     parseOutput = bimap cs head . eitherDecode . cs
-    options = ["-json", "-a", "-G:0:1", "-s", "-binary"]
+    options = ["-json", "-a", "-U", "-G:0:1", "-s", "-binary"]
 
 -- | Write metadata to a file, with ExifTool errors leading to runtime errors.
 -- (Use 'setMetaEither' instead if you would rather intercept them.) The file is
