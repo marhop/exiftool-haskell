@@ -1,6 +1,7 @@
 # exiftool-haskell
 
 [![Hackage](https://img.shields.io/hackage/v/exiftool)](https://hackage.haskell.org/package/exiftool)
+[![CI](https://github.com/marhop/exiftool-haskell/actions/workflows/ci.yml/badge.svg)](https://github.com/marhop/exiftool-haskell/actions/workflows/ci.yml)
 
 Haskell bindings to the [ExifTool](https://exiftool.org) command-line
 application that enable reading, writing and deleting metadata in various file
