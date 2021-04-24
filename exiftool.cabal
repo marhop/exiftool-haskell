@@ -1,5 +1,5 @@
 name:                 exiftool
-version:              0.1.0.0
+version:              0.1.1.0
 synopsis:             Haskell bindings to ExifTool
 description:          Haskell bindings to the [ExifTool](https://exiftool.org)
                       command-line application that enable reading, writing and
@@ -9,7 +9,7 @@ license:              MIT
 license-file:         LICENSE
 author:               Martin Hoppenheit
 maintainer:           martin@hoppenheit.info
-copyright:            2020 Martin Hoppenheit
+copyright:            2020-2021 Martin Hoppenheit
 category:             Foreign
 build-type:           Simple
 extra-source-files:   README.md
