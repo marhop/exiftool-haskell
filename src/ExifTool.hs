@@ -1,5 +1,4 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -77,16 +76,13 @@ where
 import Control.Exception (bracket)
 import Control.Monad (void)
 import Data.Bifunctor (bimap)
-import GHC.Generics (Generic)
 import System.IO (Handle, hFlush, hReady)
 
 import Data.Aeson
   ( FromJSON (..),
     FromJSONKey (..),
-    FromJSONKeyFunction (..),
     ToJSON (..),
     ToJSONKey (..),
-    ToJSONKeyFunction (..),
     eitherDecode,
     encode,
   )
@@ -132,22 +128,9 @@ type Metadata = HashMap Tag Value
 
 -- | An ExifTool tag name like @Tag "Description"@,
 -- @Tag "EXIF:IFD0:XResolution"@ or @Tag "XMP:all"@.
-newtype Tag = Tag {getTag :: Text}
-  deriving (Show, Eq, Generic, Hashable)
-
-instance FromJSON Tag where
-  parseJSON (JSON.String x) = pure $ Tag x
-  parseJSON x = fail $ "unexpected formatting of ExifTool tag: " <> show x
-
-instance FromJSONKey Tag where
-  fromJSONKey = FromJSONKeyTextParser $ parseJSON . JSON.String
-
-instance ToJSON Tag where
-  toJSON = JSON.String . getTag
-  toEncoding = text . getTag
-
-instance ToJSONKey Tag where
-  toJSONKey = ToJSONKeyText getTag (text . getTag)
+newtype Tag = Tag Text
+  deriving (Show, Eq)
+  deriving (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Text
 
 -- | An ExifTool tag value, enclosed in a type wrapper.
 data Value
