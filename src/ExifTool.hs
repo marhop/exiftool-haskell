@@ -145,13 +145,12 @@ data Value
 instance FromJSON Value where
   parseJSON (JSON.String x)
     | Just b <- stripPrefix "base64:" x =
-      either (fail . cs) (return . Binary) (decodeBase64 $ cs b)
-    | otherwise = return $ String x
-  parseJSON (JSON.Number x) = return $ Number x
-  parseJSON (JSON.Bool x) = return $ Bool x
-  parseJSON (JSON.Array xs) =
-    List <$> sequence (Vector.toList $ fmap parseJSON xs)
-  parseJSON JSON.Null = return $ String ""
+      either (fail . cs) (pure . Binary) (decodeBase64 $ cs b)
+    | otherwise = pure $ String x
+  parseJSON (JSON.Number x) = pure $ Number x
+  parseJSON (JSON.Bool x) = pure $ Bool x
+  parseJSON (JSON.Array xs) = List . Vector.toList <$> traverse parseJSON xs
+  parseJSON JSON.Null = pure $ String ""
   -- parseJSON (JSON.Object x) = Struct <$> sequence (fmap parseJSON x)
   parseJSON x = fail $ "error parsing ExifTool JSON output: " <> show x
 
@@ -172,7 +171,7 @@ instance ToJSON Value where
 startExifTool :: IO ExifTool
 startExifTool = do
   (Just i, Just o, Just e, p) <- createProcess conf
-  return $ ET i o e p
+  pure $ ET i o e p
   where
     conf =
       (proc "exiftool" options)
@@ -206,7 +205,7 @@ sendCommand (ET i o e _) cmds = do
   -- Do not switch the order of readOut/readErr lest we miss errors!
   out <- readOut o ""
   err <- readErr e ""
-  return $
+  pure $
     if isError err
       then Left err
       else Right out
@@ -215,13 +214,13 @@ sendCommand (ET i o e _) cmds = do
     readOut h acc = do
       l <- hGetLine h
       if "{ready}" `isPrefixOf` l
-        then return acc
+        then pure acc
         else readOut h (acc <> l)
     readErr :: Handle -> Text -> IO Text
     readErr h acc = do
       hasMore <- hReady h
       if not hasMore
-        then return acc
+        then pure acc
         else do
           l <- hGetLine h
           readErr h (acc <> l)
@@ -250,7 +249,7 @@ getMetaEither ::
   IO (Either Text Metadata)
 getMetaEither et file = do
   result <- sendCommand et (file : options)
-  return $ result >>= parseOutput
+  pure $ result >>= parseOutput
   where
     parseOutput :: Text -> Either Text Metadata
     parseOutput = bimap cs head . eitherDecode . cs
