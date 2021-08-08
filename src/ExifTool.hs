@@ -93,9 +93,18 @@ import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import Data.ByteString.Lazy (hPut)
 import Data.HashMap.Strict (HashMap, delete, filterWithKey, fromList)
 import Data.Hashable (Hashable)
-import Data.Scientific (Scientific)
+import Data.Scientific
+  ( FPFormat (Fixed),
+    Scientific,
+    formatScientific,
+    fromFloatDigits,
+    isInteger,
+    toBoundedInteger,
+    toRealFloat,
+  )
 import Data.String.Conversions (cs)
-import Data.Text (Text, isPrefixOf, stripPrefix, toCaseFold)
+import Data.Text (Text, intercalate, isPrefixOf, stripPrefix, toCaseFold)
+import Data.Text.Encoding (decodeUtf8')
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
 import System.IO.Temp (withSystemTempFile)
@@ -165,6 +174,79 @@ instance ToJSON Value where
   toEncoding (Number x) = scientific x
   toEncoding (Bool x) = bool x
   toEncoding (List xs) = list toEncoding xs
+
+-- | Data types that a 'Value' can be turned into.
+class FromValue a where
+  fromValue :: Value -> Maybe a
+
+-- | Data types that can be turned into a 'Value'.
+class ToValue a where
+  toValue :: a -> Value
+
+instance FromValue Value where
+  fromValue = Just
+
+instance ToValue Value where
+  toValue = id
+
+instance FromValue Text where
+  fromValue (String x) = Just x
+  fromValue (Binary x) = either (const Nothing) Just $ decodeUtf8' x
+  fromValue (Number x) =
+    Just . cs . formatScientific Fixed (Just $ if isInteger x then 0 else 2) $ x
+  fromValue (Bool x) = Just . cs . show $ x
+  fromValue (List xs) = intercalate ", " <$> traverse fromValue xs
+
+instance ToValue Text where
+  toValue = String
+
+instance FromValue ByteString where
+  fromValue (Binary x) = Just x
+  fromValue _ = Nothing
+
+instance ToValue ByteString where
+  toValue = Binary
+
+instance FromValue Int where
+  fromValue (Number x) = toBoundedInteger x
+  fromValue _ = Nothing
+
+instance ToValue Int where
+  toValue = Number . fromIntegral
+
+instance FromValue Integer where
+  fromValue x = fromIntegral <$> (fromValue x :: Maybe Int)
+
+instance ToValue Integer where
+  toValue = Number . fromIntegral
+
+instance FromValue Float where
+  fromValue (Number x) = Just $ toRealFloat x
+  fromValue _ = Nothing
+
+instance ToValue Float where
+  toValue = Number . fromFloatDigits
+
+instance FromValue Double where
+  fromValue (Number x) = Just $ toRealFloat x
+  fromValue _ = Nothing
+
+instance ToValue Double where
+  toValue = Number . fromFloatDigits
+
+instance FromValue Bool where
+  fromValue (Bool x) = Just x
+  fromValue _ = Nothing
+
+instance ToValue Bool where
+  toValue = Bool
+
+instance FromValue a => FromValue [a] where
+  fromValue (List xs) = traverse fromValue xs
+  fromValue _ = Nothing
+
+instance ToValue a => ToValue [a] where
+  toValue = List . fmap toValue
 
 -- | Start an ExifTool instance. Use 'stopExifTool' when done, or 'withExifTool'
 -- to combine both steps.
