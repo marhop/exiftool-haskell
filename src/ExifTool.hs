@@ -68,6 +68,9 @@ module ExifTool
     Metadata,
     Tag (..),
     Value (..),
+    get,
+    set,
+    del,
     filterByTag,
     (~~),
   )
@@ -91,7 +94,14 @@ import Data.Aeson.Encoding.Internal (bool, list, scientific, text)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import Data.ByteString.Lazy (hPut)
-import Data.HashMap.Strict (HashMap, delete, filterWithKey, fromList)
+import Data.HashMap.Strict
+  ( HashMap,
+    delete,
+    filterWithKey,
+    fromList,
+    insert,
+    (!?),
+  )
 import Data.Hashable (Hashable)
 import Data.Scientific
   ( FPFormat (Fixed),
@@ -392,6 +402,18 @@ deleteMetaEither ::
   Text ->
   IO (Either Text ())
 deleteMetaEither et ts = setMetaEither et (fromList $ fmap (,String "-") ts)
+
+-- | Retrieve the value of a tag.
+get :: FromValue a => Tag -> Metadata -> Maybe a
+get t m = (m !? t) >>= fromValue
+
+-- | Set a tag to a (new) value.
+set :: ToValue a => Tag -> a -> Metadata -> Metadata
+set t v = insert t (toValue v)
+
+-- | Delete a tag.
+del :: Tag -> Metadata -> Metadata
+del t = set t (String "-")
 
 -- | Filter metadata by tag name.
 filterByTag :: (Tag -> Bool) -> Metadata -> Metadata
