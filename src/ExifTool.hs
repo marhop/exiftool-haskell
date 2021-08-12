@@ -318,14 +318,14 @@ sendCommand (ET i o e _) cmds = do
 
 -- | Read the given tags from a file, with ExifTool errors leading to runtime
 -- errors. (Use 'readMetaEither' instead if you would rather intercept them.)
-readMeta :: ExifTool -> [Tag] -> Text -> IO Metadata
+readMeta :: ExifTool -> [Tag] -> FilePath -> IO Metadata
 readMeta et ts fp = eitherError <$> readMetaEither et ts fp
 
 -- | Read the given tags from a file, with ExifTool errors returned as Left
 -- values.
-readMetaEither :: ExifTool -> [Tag] -> Text -> IO (Either Text Metadata)
+readMetaEither :: ExifTool -> [Tag] -> FilePath -> IO (Either Text Metadata)
 readMetaEither et ts fp = do
-  result <- sendCommand et (fp : options <> tags)
+  result <- sendCommand et (cs fp : options <> tags)
   pure $ result >>= parseOutput
   where
     options = ["-json", "-a", "-U", "-s", "-binary"]
@@ -335,17 +335,17 @@ readMetaEither et ts fp = do
 -- | Write metadata to a file, with ExifTool errors leading to runtime errors.
 -- (Use 'setMetaEither' instead if you would rather intercept them.) The file is
 -- modified in place. Make sure you have the necessary backups!
-writeMeta :: ExifTool -> Metadata -> Text -> IO ()
+writeMeta :: ExifTool -> Metadata -> FilePath -> IO ()
 writeMeta et m fp = eitherError <$> writeMetaEither et m fp
 
 -- | Write metadata to a file, with ExifTool errors returned as Left values. The
 -- file is modified in place. Make sure you have the necessary backups!
-writeMetaEither :: ExifTool -> Metadata -> Text -> IO (Either Text ())
+writeMetaEither :: ExifTool -> Metadata -> FilePath -> IO (Either Text ())
 writeMetaEither et m fp =
   withSystemTempFile "exiftool.json" $ \metafile h -> do
     hPut h $ encode [delete (Tag "SourceFile") m]
     hFlush h
-    void <$> sendCommand et (fp : "-json=" <> cs metafile : options)
+    void <$> sendCommand et (cs fp : "-json=" <> cs metafile : options)
   where
     options = ["-overwrite_original", "-f"]
 
