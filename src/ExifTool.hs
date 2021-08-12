@@ -51,12 +51,10 @@ module ExifTool
     -- variants, one that throws runtime errors when the ExifTool process
     -- returns error messages and one that instead produces Either values.
     -- Choose those that best fit your use case.
-    getMeta,
-    setMeta,
-    deleteMeta,
-    getMetaEither,
-    setMetaEither,
-    deleteMetaEither,
+    readMeta,
+    readMetaEither,
+    writeMeta,
+    writeMetaEither,
     -- * Data types and utility functions
     --
     -- | Metadata is represented by a 'Data.HashMap.Strict.HashMap' of
@@ -98,7 +96,6 @@ import Data.HashMap.Strict
   ( HashMap,
     delete,
     filterWithKey,
-    fromList,
     insert,
     (!?),
   )
@@ -319,89 +316,38 @@ sendCommand (ET i o e _) cmds = do
     isError :: Text -> Bool
     isError t = t `notElem` ["", "    1 image files updated"]
 
--- | Read all metadata from a file, with ExifTool errors leading to runtime
--- errors. (Use 'getMetaEither' instead if you would rather intercept them.)
-getMeta ::
-  -- | ExifTool instance
-  ExifTool ->
-  -- | file name
-  Text ->
-  -- | tag/value Map
-  IO Metadata
-getMeta et file = eitherError <$> getMetaEither et file
+-- | Read the given tags from a file, with ExifTool errors leading to runtime
+-- errors. (Use 'readMetaEither' instead if you would rather intercept them.)
+readMeta :: ExifTool -> [Tag] -> Text -> IO Metadata
+readMeta et ts fp = eitherError <$> readMetaEither et ts fp
 
--- | Read all metadata from a file, with ExifTool errors returned as Left
+-- | Read the given tags from a file, with ExifTool errors returned as Left
 -- values.
-getMetaEither ::
-  -- | ExifTool instance
-  ExifTool ->
-  -- | file name
-  Text ->
-  -- | tag/value Map
-  IO (Either Text Metadata)
-getMetaEither et file = do
-  result <- sendCommand et (file : options)
+readMetaEither :: ExifTool -> [Tag] -> Text -> IO (Either Text Metadata)
+readMetaEither et ts fp = do
+  result <- sendCommand et (fp : options <> tags)
   pure $ result >>= parseOutput
   where
-    parseOutput :: Text -> Either Text Metadata
+    options = ["-json", "-a", "-U", "-s", "-binary"]
+    tags = fmap (\(Tag t) -> "-" <> t) ts
     parseOutput = bimap cs head . eitherDecode . cs
-    options = ["-json", "-a", "-U", "-G:0:1", "-s", "-binary"]
 
 -- | Write metadata to a file, with ExifTool errors leading to runtime errors.
 -- (Use 'setMetaEither' instead if you would rather intercept them.) The file is
 -- modified in place. Make sure you have the necessary backups!
-setMeta ::
-  -- | ExifTool instance
-  ExifTool ->
-  -- | tag/value Map
-  Metadata ->
-  -- | file name
-  Text ->
-  IO ()
-setMeta et m file = eitherError <$> setMetaEither et m file
+writeMeta :: ExifTool -> Metadata -> Text -> IO ()
+writeMeta et m fp = eitherError <$> writeMetaEither et m fp
 
 -- | Write metadata to a file, with ExifTool errors returned as Left values. The
 -- file is modified in place. Make sure you have the necessary backups!
-setMetaEither ::
-  -- | ExifTool instance
-  ExifTool ->
-  -- | tag/value Map
-  Metadata ->
-  -- | file name
-  Text ->
-  IO (Either Text ())
-setMetaEither et m file =
+writeMetaEither :: ExifTool -> Metadata -> Text -> IO (Either Text ())
+writeMetaEither et m fp =
   withSystemTempFile "exiftool.json" $ \metafile h -> do
     hPut h $ encode [delete (Tag "SourceFile") m]
     hFlush h
-    void <$> sendCommand et (file : "-json=" <> cs metafile : options)
+    void <$> sendCommand et (fp : "-json=" <> cs metafile : options)
   where
     options = ["-overwrite_original", "-f"]
-
--- | Delete metadata from a file, with ExifTool errors leading to runtime
--- errors. (Use 'deleteMetaEither' instead if you would rather intercept them.)
--- The file is modified in place. Make sure you have the necessary backups!
-deleteMeta ::
-  -- | ExifTool instance
-  ExifTool ->
-  -- | tags to be deleted
-  [Tag] ->
-  -- | file name
-  Text ->
-  IO ()
-deleteMeta et ts file = eitherError <$> deleteMetaEither et ts file
-
--- | Delete metadata from a file, with ExifTool errors returned as Left values.
--- The file is modified in place. Make sure you have the necessary backups!
-deleteMetaEither ::
-  -- | ExifTool instance
-  ExifTool ->
-  -- | tags to be deleted
-  [Tag] ->
-  -- | file name
-  Text ->
-  IO (Either Text ())
-deleteMetaEither et ts = setMetaEither et (fromList $ fmap (,String "-") ts)
 
 -- | Retrieve the value of a tag.
 get :: FromValue a => Tag -> Metadata -> Maybe a
