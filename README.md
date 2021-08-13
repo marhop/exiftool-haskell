@@ -11,21 +11,21 @@ Full documentation is on [Hackage](https://hackage.haskell.org/package/exiftool/
 A short code example:
 
 ```haskell
-{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Data.HashMap.Strict ((!?))
+import Data.Text (Text)
 import ExifTool
 
-example :: IO ()
-example =
-  withExifTool $ \et -> do
-    -- Read metadata, with exact (!?) and fuzzy (~~) tag lookup.
-    m <- getMeta et "a.jpg"
-    print $ m !? Tag "EXIF" "ExifIFD" "DateTimeOriginal"
-    print $ m ~~ Tag "EXIF" "" "XResolution"
-    print $ m ~~ Tag "XMP" "" ""
-    -- Write and delete metadata.
-    setMeta et [(Tag "XMP" "XMP-dc" "Description", String "...")] "a.jpg"
-    deleteMeta et [Tag "XMP" "XMP-dc" "Description"] "a.jpg"
+data Foo = Foo
+  { description :: Text,
+    resolution :: Int
+  }
+  deriving (Show)
+
+main :: IO ()
+main = withExifTool $ \et -> do
+  m <- readMeta et [] "a.jpg"
+  print $ Foo <$> get (Tag "Description") m <*> get (Tag "XResolution") m
+  let m' = del (Tag "Description") . set (Tag "XResolution") (42 :: Int) $ m
+  writeMeta et m' "a.jpg"
 ```

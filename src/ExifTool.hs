@@ -4,7 +4,7 @@
 
 -- |
 -- Module     : ExifTool
--- Copyright  : (c) Martin Hoppenheit 2021
+-- Copyright  : (c) Martin Hoppenheit 2020-2021
 -- License    : MIT
 -- Maintainer : martin@hoppenheit.info
 --
@@ -13,23 +13,23 @@
 -- in various file formats. Here's a short code example, the details are
 -- explained below.
 --
--- > {-# LANGUAGE OverloadedLists #-}
 -- > {-# LANGUAGE OverloadedStrings #-}
 -- > 
--- > import Data.HashMap.Strict ((!?))
+-- > import Data.Text (Text)
 -- > import ExifTool
 -- > 
--- > example :: IO ()
--- > example =
--- >   withExifTool $ \et -> do
--- >     -- Read metadata, with exact (!?) and fuzzy (~~) tag lookup.
--- >     m <- getMeta et "a.jpg"
--- >     print $ m !? Tag "EXIF" "ExifIFD" "DateTimeOriginal"
--- >     print $ m ~~ Tag "EXIF" "" "XResolution"
--- >     print $ m ~~ Tag "XMP" "" ""
--- >     -- Write and delete metadata.
--- >     setMeta et [(Tag "XMP" "XMP-dc" "Description", String "...")] "a.jpg"
--- >     deleteMeta et [Tag "XMP" "XMP-dc" "Description"] "a.jpg"
+-- > data Foo = Foo
+-- >   { description :: Text,
+-- >     resolution :: Int
+-- >   }
+-- >   deriving (Show)
+-- > 
+-- > main :: IO ()
+-- > main = withExifTool $ \et -> do
+-- >   m <- readMeta et [] "a.jpg"
+-- >   print $ Foo <$> get (Tag "Description") m <*> get (Tag "XResolution") m
+-- >   let m' = del (Tag "Description") . set (Tag "XResolution") (42 :: Int) $ m
+-- >   writeMeta et m' "a.jpg"
 --
 -- Note that this module expects the @exiftool@ binary to be in your PATH.
 
@@ -46,31 +46,26 @@ module ExifTool
     withExifTool,
     -- * Reading and writing metadata
     --
-    -- | The ExifTool instance can then be used to read, write or delete
-    -- metadata in a file with the respective functions. These come in two
-    -- variants, one that throws runtime errors when the ExifTool process
-    -- returns error messages and one that instead produces Either values.
-    -- Choose those that best fit your use case.
+    -- | The ExifTool instance can then be used to read or write metadata in a
+    -- file with the respective functions.
     readMeta,
     readMetaEither,
     writeMeta,
     writeMetaEither,
-    -- * Data types and utility functions
-    --
     -- | Metadata is represented by a 'Data.HashMap.Strict.HashMap' of
-    -- 'Tag'/'Value' pairs (with alias 'Metadata'), so it is advisable to
-    -- import some functions like 'Data.HashMap.Strict.lookup' or
-    -- 'Data.HashMap.Strict.!?' from the "Data.HashMap.Strict" module. The
-    -- ExifTool module defines additional utility functions that make working
-    -- with Metadata easier.
+    -- 'Tag'/'Value' pairs (with alias 'Metadata').
     Metadata,
     Tag (..),
     Value (..),
+    FromValue (..),
+    ToValue (..),
+    -- | In general, the usual HashMap functions like
+    -- 'Data.HashMap.Strict.lookup' can be used on Metadata. However, the
+    -- ExifTool module defines additional utility functions that make working
+    -- with Metadata easier.
     get,
     set,
     del,
-    filterByTag,
-    (~~),
   )
 where
 
@@ -92,13 +87,7 @@ import Data.Aeson.Encoding.Internal (bool, list, scientific, text)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import Data.ByteString.Lazy (hPut)
-import Data.HashMap.Strict
-  ( HashMap,
-    delete,
-    filterWithKey,
-    insert,
-    (!?),
-  )
+import Data.HashMap.Strict (HashMap, delete, insert, (!?))
 import Data.Hashable (Hashable)
 import Data.Scientific
   ( FPFormat (Fixed),
@@ -110,7 +99,7 @@ import Data.Scientific
     toRealFloat,
   )
 import Data.String.Conversions (cs)
-import Data.Text (Text, intercalate, isPrefixOf, stripPrefix, toCaseFold)
+import Data.Text (Text, intercalate, isPrefixOf, stripPrefix)
 import Data.Text.Encoding (decodeUtf8')
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
@@ -183,10 +172,14 @@ instance ToJSON Value where
   toEncoding (List xs) = list toEncoding xs
 
 -- | Data types that a 'Value' can be turned into.
+--
+-- @since 0.2.0.0
 class FromValue a where
   fromValue :: Value -> Maybe a
 
 -- | Data types that can be turned into a 'Value'.
+--
+-- @since 0.2.0.0
 class ToValue a where
   toValue :: a -> Value
 
@@ -318,11 +311,16 @@ sendCommand (ET i o e _) cmds = do
 
 -- | Read the given tags from a file, with ExifTool errors leading to runtime
 -- errors. (Use 'readMetaEither' instead if you would rather intercept them.)
+-- Use an empty tag list to return all metadata.
+--
+-- @since 0.2.0.0
 readMeta :: ExifTool -> [Tag] -> FilePath -> IO Metadata
 readMeta et ts fp = eitherError <$> readMetaEither et ts fp
 
 -- | Read the given tags from a file, with ExifTool errors returned as Left
--- values.
+-- values. Use an empty tag list to return all metadata.
+--
+-- @since 0.2.0.0
 readMetaEither :: ExifTool -> [Tag] -> FilePath -> IO (Either Text Metadata)
 readMetaEither et ts fp = do
   result <- sendCommand et (cs fp : options <> tags)
@@ -335,11 +333,15 @@ readMetaEither et ts fp = do
 -- | Write metadata to a file, with ExifTool errors leading to runtime errors.
 -- (Use 'setMetaEither' instead if you would rather intercept them.) The file is
 -- modified in place. Make sure you have the necessary backups!
+--
+-- @since 0.2.0.0
 writeMeta :: ExifTool -> Metadata -> FilePath -> IO ()
 writeMeta et m fp = eitherError <$> writeMetaEither et m fp
 
 -- | Write metadata to a file, with ExifTool errors returned as Left values. The
 -- file is modified in place. Make sure you have the necessary backups!
+--
+-- @since 0.2.0.0
 writeMetaEither :: ExifTool -> Metadata -> FilePath -> IO (Either Text ())
 writeMetaEither et m fp =
   withSystemTempFile "exiftool.json" $ \metafile h -> do
@@ -350,28 +352,23 @@ writeMetaEither et m fp =
     options = ["-overwrite_original", "-f"]
 
 -- | Retrieve the value of a tag.
+--
+-- @since 0.2.0.0
 get :: FromValue a => Tag -> Metadata -> Maybe a
 get t m = (m !? t) >>= fromValue
 
 -- | Set a tag to a (new) value.
+--
+-- @since 0.2.0.0
 set :: ToValue a => Tag -> a -> Metadata -> Metadata
 set t v = insert t (toValue v)
 
--- | Delete a tag.
+-- | Delete a tag (i.e., set its value to a marker that will make ExifTool
+-- delete it when 'writeMeta' is called.
+--
+-- @since 0.2.0.0
 del :: Tag -> Metadata -> Metadata
 del t = set t (String "-")
-
--- | Filter metadata by tag name.
-filterByTag :: (Tag -> Bool) -> Metadata -> Metadata
-filterByTag p = filterWithKey (\t _ -> p t)
-
--- | Filter metadata by tag name ignoring case.
---
--- Note that @~~@ has higher precedence than '<>', so @m ~~ t <> m ~~ t' == (m
--- ~~ t) <> (m ~~ t')@ which makes combining filters easy.
-(~~) :: Metadata -> Tag -> Metadata
-infixl 8 ~~
-m ~~ (Tag t) = filterByTag (\(Tag t') -> toCaseFold t == toCaseFold t') m
 
 -- | Extract content from Right or throw error.
 eitherError :: Either Text a -> a
