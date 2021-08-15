@@ -133,7 +133,7 @@ type Metadata = HashMap Tag Value
 
 -- | An ExifTool tag name like @Tag "Description"@,
 -- @Tag "EXIF:IFD0:XResolution"@ or @Tag "XMP:all"@.
-newtype Tag = Tag Text
+newtype Tag = Tag {tagName :: Text}
   deriving (Show, Eq)
   deriving (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Text
 
@@ -327,7 +327,7 @@ readMetaEither et ts fp = do
   pure $ result >>= parseOutput
   where
     options = ["-json", "-a", "-U", "-s", "-binary"]
-    tags = fmap (\(Tag t) -> "-" <> t) ts
+    tags = fmap (("-" <>) . tagName) ts
     parseOutput = bimap cs head . eitherDecode . cs
 
 -- | Write metadata to a file, with ExifTool errors leading to runtime errors.
