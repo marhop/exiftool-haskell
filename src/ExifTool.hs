@@ -326,7 +326,7 @@ readMetaEither et ts fp = do
   result <- sendCommand et (cs fp : options <> tags)
   pure $ result >>= parseOutput
   where
-    options = ["-json", "-a", "-U", "-s", "-binary"]
+    options = ["-json", "-binary", "-unknown2"]
     tags = fmap (("-" <>) . tagName) ts
     parseOutput = bimap cs head . eitherDecode . cs
 
