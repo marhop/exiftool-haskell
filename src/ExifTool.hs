@@ -87,7 +87,7 @@ import Data.Aeson.Encoding.Internal (bool, list, scientific, text)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import Data.ByteString.Lazy (hPut)
-import Data.HashMap.Strict (HashMap, delete, insert, (!?))
+import Data.HashMap.Strict (HashMap, delete, insert, mapKeys, (!?))
 import Data.Hashable (Hashable)
 import Data.Scientific
   ( FPFormat (Fixed),
@@ -99,7 +99,7 @@ import Data.Scientific
     toRealFloat,
   )
 import Data.String.Conversions (cs)
-import Data.Text (Text, intercalate, isPrefixOf, stripPrefix)
+import Data.Text (Text, intercalate, isPrefixOf, stripPrefix, toCaseFold)
 import Data.Text.Encoding (decodeUtf8')
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
@@ -129,13 +129,19 @@ data ExifTool
       !ProcessHandle
 
 -- | A set of ExifTool tag/value pairs.
-type Metadata = HashMap Tag Value
+newtype Metadata = Metadata (HashMap Tag Value)
+  deriving (Show)
+  deriving (Semigroup, Monoid) via (HashMap Tag Value)
 
 -- | An ExifTool tag name like @Tag "Description"@,
 -- @Tag "EXIF:IFD0:XResolution"@ or @Tag "XMP:all"@.
 newtype Tag = Tag {tagName :: Text}
   deriving (Show, Eq)
   deriving (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Text
+
+-- | Make a tag name lower case.
+toLower :: Tag -> Tag
+toLower = Tag . toCaseFold . tagName
 
 -- | An ExifTool tag value, enclosed in a type wrapper.
 data Value
@@ -324,7 +330,7 @@ readMeta et ts fp = eitherError <$> readMetaEither et ts fp
 readMetaEither :: ExifTool -> [Tag] -> FilePath -> IO (Either Text Metadata)
 readMetaEither et ts fp = do
   result <- sendCommand et (cs fp : options <> tags)
-  pure $ result >>= parseOutput
+  pure $ Metadata . mapKeys toLower <$> (result >>= parseOutput)
   where
     options = ["-json", "-binary", "-unknown2"]
     tags = fmap (("-" <>) . tagName) ts
@@ -343,7 +349,7 @@ writeMeta et m fp = eitherError <$> writeMetaEither et m fp
 --
 -- @since 0.2.0.0
 writeMetaEither :: ExifTool -> Metadata -> FilePath -> IO (Either Text ())
-writeMetaEither et m fp =
+writeMetaEither et (Metadata m) fp =
   withSystemTempFile "exiftool.json" $ \metafile h -> do
     hPut h $ encode [delete (Tag "SourceFile") m]
     hFlush h
@@ -351,20 +357,21 @@ writeMetaEither et m fp =
   where
     options = ["-overwrite_original", "-f"]
 
--- | Retrieve the value of a tag.
+-- | Retrieve the value of a tag. Tag case is ignored i.e., @get (Tag
+-- "Description)" m == get (Tag "description") m@.
 --
 -- @since 0.2.0.0
 get :: FromValue a => Tag -> Metadata -> Maybe a
-get t m = (m !? t) >>= fromValue
+get t (Metadata m) = (m !? toLower t) >>= fromValue
 
--- | Set a tag to a (new) value.
+-- | Set a tag to a (new) value. Tag case is ignored.
 --
 -- @since 0.2.0.0
 set :: ToValue a => Tag -> a -> Metadata -> Metadata
-set t v = insert t (toValue v)
+set t v (Metadata m) = Metadata $ insert (toLower t) (toValue v) m
 
 -- | Delete a tag (i.e., set its value to a marker that will make ExifTool
--- delete it when 'writeMeta' is called.
+-- delete it when 'writeMeta' is called). Tag case is ignored.
 --
 -- @since 0.2.0.0
 del :: Tag -> Metadata -> Metadata
