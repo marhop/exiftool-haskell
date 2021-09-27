@@ -70,7 +70,7 @@ module ExifTool
 where
 
 import Control.Exception (bracket)
-import Control.Monad (void)
+import Control.Monad (guard, void)
 import Data.Bifunctor (bimap)
 import System.IO (Handle, hFlush, hReady)
 
@@ -362,7 +362,10 @@ writeMetaEither et (Metadata m) fp =
 --
 -- @since 0.2.0.0
 get :: FromValue a => Tag -> Metadata -> Maybe a
-get t (Metadata m) = (m !? toLower t) >>= fromValue
+get t (Metadata m) = do
+  v <- m !? toLower t
+  guard (v /= String "-") -- Marked for deletion, see del function below.
+  fromValue v
 
 -- | Set a tag to a (new) value. Tag case is ignored.
 --
