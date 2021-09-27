@@ -56,6 +56,7 @@ module ExifTool
     -- 'Tag'/'Value' pairs (with alias 'Metadata').
     Metadata,
     Tag (..),
+    stripGroups,
     Value (..),
     FromValue (..),
     ToValue (..),
@@ -99,7 +100,14 @@ import Data.Scientific
     toRealFloat,
   )
 import Data.String.Conversions (cs)
-import Data.Text (Text, intercalate, isPrefixOf, stripPrefix, toCaseFold)
+import Data.Text
+  ( Text,
+    intercalate,
+    isPrefixOf,
+    splitOn,
+    stripPrefix,
+    toCaseFold,
+  )
 import Data.Text.Encoding (decodeUtf8')
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
@@ -138,6 +146,11 @@ newtype Metadata = Metadata (HashMap Tag Value)
 newtype Tag = Tag {tagName :: Text}
   deriving (Show, Eq)
   deriving (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Text
+
+-- | Remove group prefixes from a tag name e.g., @stripGroups (Tag
+-- "XMP:XMP-dc:Description") == Tag "Description"@.
+stripGroups :: Tag -> Tag
+stripGroups = Tag . last . splitOn ":" . tagName
 
 -- | Make a tag name lower case.
 toLower :: Tag -> Tag
