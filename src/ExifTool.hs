@@ -52,18 +52,14 @@ module ExifTool
     readMetaEither,
     writeMeta,
     writeMetaEither,
-    -- | Metadata is represented by a 'Data.HashMap.Strict.HashMap' of
-    -- 'Tag'/'Value' pairs (with alias 'Metadata').
+    -- | Metadata is represented by a set of 'Tag'/'Value' pairs that can be
+    -- queried and manipulated with the respective functions.
     Metadata,
     Tag (..),
     stripGroups,
     Value (..),
     FromValue (..),
     ToValue (..),
-    -- | In general, the usual HashMap functions like
-    -- 'Data.HashMap.Strict.lookup' can be used on Metadata. However, the
-    -- ExifTool module defines additional utility functions that make working
-    -- with Metadata easier.
     get,
     set,
     del,
@@ -136,13 +132,14 @@ data ExifTool
       -- process handle of this ExifTool process
       !ProcessHandle
 
--- | A set of ExifTool tag/value pairs.
+-- | A set of ExifTool tag/value pairs. Use 'get', 'set' and 'del' to query and
+-- manipulate this set.
 newtype Metadata = Metadata (HashMap Tag Value)
   deriving (Show, Eq)
   deriving (Semigroup, Monoid) via (HashMap Tag Value)
 
--- | An ExifTool tag name like @Tag "Description"@,
--- @Tag "EXIF:IFD0:XResolution"@ or @Tag "XMP:all"@.
+-- | An ExifTool tag name like @Tag "Description"@ or @Tag
+-- "EXIF:IFD0:XResolution"@.
 newtype Tag = Tag {tagName :: Text}
   deriving (Show, Eq)
   deriving (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey) via Text
@@ -156,7 +153,8 @@ stripGroups = Tag . last . splitOn ":" . tagName
 toLower :: Tag -> Tag
 toLower = Tag . toCaseFold . tagName
 
--- | An ExifTool tag value, enclosed in a type wrapper.
+-- | An ExifTool tag value, enclosed in a type wrapper. The type wrapper can
+-- usually be ignored when using the 'FromValue' and 'ToValue' instances.
 data Value
   = String !Text
   | Binary !ByteString
@@ -328,16 +326,16 @@ sendCommand (ET i o e _) cmds = do
     isError :: Text -> Bool
     isError t = t `notElem` ["", "    1 image files updated"]
 
--- | Read the given tags from a file, with ExifTool errors leading to runtime
--- errors. (Use 'readMetaEither' instead if you would rather intercept them.)
--- Use an empty tag list to return all metadata.
+-- | Read the given tags from a file. Use an empty tag list to return all
+-- metadata. Tag names are returned in "simple" form without any leading group
+-- prefixes, independent of how they are specified in the given tag list.
 --
 -- @since 0.2.0.0
 readMeta :: ExifTool -> [Tag] -> FilePath -> IO Metadata
 readMeta et ts fp = eitherError <$> readMetaEither et ts fp
 
--- | Read the given tags from a file, with ExifTool errors returned as Left
--- values. Use an empty tag list to return all metadata.
+-- | Like 'readMeta', but ExifTool errors are returned as Left values instead of
+-- leading to runtime errors.
 --
 -- @since 0.2.0.0
 readMetaEither :: ExifTool -> [Tag] -> FilePath -> IO (Either Text Metadata)
@@ -349,16 +347,15 @@ readMetaEither et ts fp = do
     tags = fmap (("-" <>) . tagName) ts
     parseOutput = bimap cs head . eitherDecode . cs
 
--- | Write metadata to a file, with ExifTool errors leading to runtime errors.
--- (Use 'setMetaEither' instead if you would rather intercept them.) The file is
--- modified in place. Make sure you have the necessary backups!
+-- | Write metadata to a file. The file is modified in place, make sure you have
+-- the necessary backups!
 --
 -- @since 0.2.0.0
 writeMeta :: ExifTool -> Metadata -> FilePath -> IO ()
 writeMeta et m fp = eitherError <$> writeMetaEither et m fp
 
--- | Write metadata to a file, with ExifTool errors returned as Left values. The
--- file is modified in place. Make sure you have the necessary backups!
+-- | Like 'writeMeta', but ExifTool errors are returned as Left values instead
+-- of leading to runtime errors.
 --
 -- @since 0.2.0.0
 writeMetaEither :: ExifTool -> Metadata -> FilePath -> IO (Either Text ())
