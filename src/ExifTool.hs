@@ -138,7 +138,7 @@ data ExifTool
 
 -- | A set of ExifTool tag/value pairs.
 newtype Metadata = Metadata (HashMap Tag Value)
-  deriving (Show)
+  deriving (Show, Eq)
   deriving (Semigroup, Monoid) via (HashMap Tag Value)
 
 -- | An ExifTool tag name like @Tag "Description"@,
