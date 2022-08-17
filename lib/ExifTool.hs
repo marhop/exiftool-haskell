@@ -1,5 +1,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module     : ExifTool
@@ -84,7 +85,7 @@ import Data.Aeson.Encoding.Internal (bool, list, scientific, text)
 import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
-import Data.ByteString.Lazy (hPut)
+import qualified Data.ByteString.Lazy as BL
 import Data.HashMap.Strict (HashMap, delete, insert, mapKeys, (!?))
 import Data.Hashable (Hashable)
 import Data.Scientific
@@ -96,7 +97,6 @@ import Data.Scientific
     toBoundedInteger,
     toRealFloat,
   )
-import Data.String.Conversions (cs)
 import Data.Text
   ( Text,
     intercalate,
@@ -120,6 +120,7 @@ import System.Process
     std_in,
     std_out,
   )
+import Witch (into)
 
 -- | An ExifTool instance, initialized with 'startExifTool' and terminated with
 -- 'stopExifTool'.
@@ -169,7 +170,10 @@ data Value
 instance FromJSON Value where
   parseJSON (JSON.String x)
     | Just b <- stripPrefix "base64:" x =
-        either (fail . cs) (pure . Binary) (decodeBase64 $ cs b)
+        either
+          (fail . into @String)
+          (pure . Binary)
+          (decodeBase64 $ into @ByteString b)
     | otherwise = pure $ String x
   parseJSON (JSON.Number x) = pure $ Number x
   parseJSON (JSON.Bool x) = pure $ Bool x
@@ -212,8 +216,11 @@ instance FromValue Text where
   fromValue (String x) = Just x
   fromValue (Binary x) = either (const Nothing) Just $ decodeUtf8' x
   fromValue (Number x) =
-    Just . cs . formatScientific Fixed (Just $ if isInteger x then 0 else 2) $ x
-  fromValue (Bool x) = Just . cs . show $ x
+    Just
+      . into @Text
+      . formatScientific Fixed (Just $ if isInteger x then 0 else 2)
+      $ x
+  fromValue (Bool x) = Just . into @Text . show $ x
   fromValue (List xs) = intercalate ", " <$> traverse fromValue xs
 
 instance ToValue Text where
@@ -342,12 +349,12 @@ readMeta et ts fp = eitherError <$> readMetaEither et ts fp
 -- @since 0.2.0.0
 readMetaEither :: ExifTool -> [Tag] -> FilePath -> IO (Either Text Metadata)
 readMetaEither et ts fp = do
-  result <- sendCommand et (cs fp : options <> tags)
+  result <- sendCommand et (into @Text fp : options <> tags)
   pure $ Metadata . mapKeys toLower <$> (result >>= parseOutput)
   where
     options = ["-json", "-binary", "-unknown2"]
     tags = fmap (("-" <>) . tagName) ts
-    parseOutput = bimap cs head . eitherDecode . cs
+    parseOutput = bimap (into @Text) head . eitherDecode . into @BL.ByteString
 
 -- | Write metadata to a file. The file is modified in place, make sure you have
 -- the necessary backups!
@@ -363,9 +370,12 @@ writeMeta et m fp = eitherError <$> writeMetaEither et m fp
 writeMetaEither :: ExifTool -> Metadata -> FilePath -> IO (Either Text ())
 writeMetaEither et (Metadata m) fp =
   withSystemTempFile "exiftool.json" $ \metafile h -> do
-    hPut h $ encode [delete (Tag "SourceFile") m]
+    BL.hPut h $ encode [delete (Tag "SourceFile") m]
     hFlush h
-    void <$> sendCommand et (cs fp : "-json=" <> cs metafile : options)
+    void
+      <$> sendCommand
+        et
+        (into @Text fp : "-json=" <> into @Text metafile : options)
   where
     options = ["-overwrite_original", "-f"]
 
@@ -394,4 +404,4 @@ del t = set t (String "-")
 
 -- | Extract content from Right or throw error.
 eitherError :: Either Text a -> a
-eitherError = either (error . cs) id
+eitherError = either (error . into @String) id
