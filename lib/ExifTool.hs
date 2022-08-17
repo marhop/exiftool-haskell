@@ -1,10 +1,9 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 
 -- |
 -- Module     : ExifTool
--- Copyright  : (c) Martin Hoppenheit 2020-2021
+-- Copyright  : (c) Martin Hoppenheit 2020-2022
 -- License    : MIT
 -- Maintainer : martin@hoppenheit.info
 --
@@ -14,16 +13,16 @@
 -- explained below.
 --
 -- > {-# LANGUAGE OverloadedStrings #-}
--- > 
+-- >
 -- > import Data.Text (Text)
 -- > import ExifTool
--- > 
+-- >
 -- > data Foo = Foo
 -- >   { description :: Text,
 -- >     resolution :: Int
 -- >   }
 -- >   deriving (Show)
--- > 
+-- >
 -- > main :: IO ()
 -- > main = withExifTool $ \et -> do
 -- >   m <- readMeta et [] "a.jpg"
@@ -32,10 +31,11 @@
 -- >   writeMeta et m' "a.jpg"
 --
 -- Note that this module expects the @exiftool@ binary to be in your PATH.
-
 module ExifTool
   ( -- * Running an ExifTool instance
+
     --
+
     -- | Most functions in this module interact with an ExifTool instance
     -- i.e., a running ExifTool process represented by the 'ExifTool' data
     -- type. The easiest way to obtain an instance is the 'withExifTool'
@@ -44,8 +44,11 @@ module ExifTool
     startExifTool,
     stopExifTool,
     withExifTool,
+
     -- * Reading and writing metadata
+
     --
+
     -- | The ExifTool instance can then be used to read or write metadata in a
     -- file with the respective functions.
     readMeta,
@@ -68,9 +71,6 @@ where
 
 import Control.Exception (bracket)
 import Control.Monad (guard, void)
-import Data.Bifunctor (bimap)
-import System.IO (Handle, hFlush, hReady)
-
 import Data.Aeson
   ( FromJSON (..),
     FromJSONKey (..),
@@ -81,6 +81,7 @@ import Data.Aeson
   )
 import qualified Data.Aeson as JSON
 import Data.Aeson.Encoding.Internal (bool, list, scientific, text)
+import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import Data.ByteString.Lazy (hPut)
@@ -107,6 +108,7 @@ import Data.Text
 import Data.Text.Encoding (decodeUtf8')
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
+import System.IO (Handle, hFlush, hReady)
 import System.IO.Temp (withSystemTempFile)
 import System.Process
   ( ProcessHandle,
@@ -167,7 +169,7 @@ data Value
 instance FromJSON Value where
   parseJSON (JSON.String x)
     | Just b <- stripPrefix "base64:" x =
-      either (fail . cs) (pure . Binary) (decodeBase64 $ cs b)
+        either (fail . cs) (pure . Binary) (decodeBase64 $ cs b)
     | otherwise = pure $ String x
   parseJSON (JSON.Number x) = pure $ Number x
   parseJSON (JSON.Bool x) = pure $ Bool x
