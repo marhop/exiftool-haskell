@@ -1,5 +1,9 @@
 # Revision history for exiftool
 
+## 0.2.0.1 -- 2022-08-18
+
+* Dependency version bumps.
+
 ## 0.2.0.0 -- 2021-09-28
 
 * New (backwards-incompatible) API. Highlights:
