@@ -105,7 +105,7 @@ import Data.Text
     stripPrefix,
     toCaseFold,
   )
-import Data.Text.Encoding (decodeUtf8')
+import Data.Text.Encoding (decodeUtf8', encodeUtf8)
 import Data.Text.IO (hGetLine, hPutStrLn)
 import qualified Data.Vector as Vector
 import System.IO (Handle, hFlush, hReady)
@@ -173,7 +173,7 @@ instance FromJSON Value where
         either
           (fail . into @String)
           (pure . Binary)
-          (decodeBase64 $ into @ByteString b)
+          (decodeBase64 $ encodeUtf8 b)
     | otherwise = pure $ String x
   parseJSON (JSON.Number x) = pure $ Number x
   parseJSON (JSON.Bool x) = pure $ Bool x
@@ -354,7 +354,8 @@ readMetaEither et ts fp = do
   where
     options = ["-json", "-binary", "-unknown2"]
     tags = fmap (("-" <>) . tagName) ts
-    parseOutput = bimap (into @Text) head . eitherDecode . into @BL.ByteString
+    parseOutput =
+      bimap (into @Text) head . eitherDecode . into @BL.ByteString . encodeUtf8
 
 -- | Write metadata to a file. The file is modified in place, make sure you have
 -- the necessary backups!
