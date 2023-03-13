@@ -1,5 +1,9 @@
 # Revision history for exiftool
 
+## 0.2.0.3 -- 2023-03-13
+
+* Maintenance release.
+
 ## 0.2.0.2 -- 2022-11-14
 
 * Maintenance release.

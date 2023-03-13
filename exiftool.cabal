@@ -10,7 +10,7 @@ license:            MIT
 license-file:       LICENSE
 author:             Martin Hoppenheit
 maintainer:         martin@hoppenheit.info
-copyright:          2020-2022 Martin Hoppenheit
+copyright:          2020-2023 Martin Hoppenheit
 category:           Foreign
 extra-source-files: README.md CHANGELOG.md
 
