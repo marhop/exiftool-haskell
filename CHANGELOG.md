@@ -1,5 +1,9 @@
 # Revision history for exiftool
 
+## 0.2.0.4 -- 2023-03-13
+
+* Bugfix re version number in cabal file.
+
 ## 0.2.0.3 -- 2023-03-13
 
 * Maintenance release.
