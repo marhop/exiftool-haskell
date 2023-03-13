@@ -1,6 +1,5 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module     : ExifTool
@@ -101,9 +100,11 @@ import Data.Text
   ( Text,
     intercalate,
     isPrefixOf,
+    pack,
     splitOn,
     stripPrefix,
     toCaseFold,
+    unpack,
   )
 import Data.Text.Encoding (decodeUtf8', encodeUtf8)
 import Data.Text.IO (hGetLine, hPutStrLn)
@@ -120,7 +121,6 @@ import System.Process
     std_in,
     std_out,
   )
-import Witch (into)
 
 -- | An ExifTool instance, initialized with 'startExifTool' and terminated with
 -- 'stopExifTool'.
@@ -171,7 +171,7 @@ instance FromJSON Value where
   parseJSON (JSON.String x)
     | Just b <- stripPrefix "base64:" x =
         either
-          (fail . into @String)
+          (fail . unpack)
           (pure . Binary)
           (decodeBase64 $ encodeUtf8 b)
     | otherwise = pure $ String x
@@ -217,10 +217,10 @@ instance FromValue Text where
   fromValue (Binary x) = either (const Nothing) Just $ decodeUtf8' x
   fromValue (Number x) =
     Just
-      . into @Text
+      . pack
       . formatScientific Fixed (Just $ if isInteger x then 0 else 2)
       $ x
-  fromValue (Bool x) = Just . into @Text . show $ x
+  fromValue (Bool x) = Just . pack . show $ x
   fromValue (List xs) = intercalate ", " <$> traverse fromValue xs
 
 instance ToValue Text where
@@ -267,11 +267,11 @@ instance FromValue Bool where
 instance ToValue Bool where
   toValue = Bool
 
-instance FromValue a => FromValue [a] where
+instance (FromValue a) => FromValue [a] where
   fromValue (List xs) = traverse fromValue xs
   fromValue _ = Nothing
 
-instance ToValue a => ToValue [a] where
+instance (ToValue a) => ToValue [a] where
   toValue = List . fmap toValue
 
 -- | Start an ExifTool instance. Use 'stopExifTool' when done, or 'withExifTool'
@@ -349,13 +349,13 @@ readMeta et ts fp = eitherError <$> readMetaEither et ts fp
 -- @since 0.2.0.0
 readMetaEither :: ExifTool -> [Tag] -> FilePath -> IO (Either Text Metadata)
 readMetaEither et ts fp = do
-  result <- sendCommand et (into @Text fp : options <> tags)
+  result <- sendCommand et (pack fp : options <> tags)
   pure $ Metadata . mapKeys toLower <$> (result >>= parseOutput)
   where
     options = ["-json", "-binary", "-unknown2"]
     tags = fmap (("-" <>) . tagName) ts
     parseOutput =
-      bimap (into @Text) head . eitherDecode . into @BL.ByteString . encodeUtf8
+      bimap pack head . eitherDecode . BL.fromStrict . encodeUtf8
 
 -- | Write metadata to a file. The file is modified in place, make sure you have
 -- the necessary backups!
@@ -373,10 +373,7 @@ writeMetaEither et (Metadata m) fp =
   withSystemTempFile "exiftool.json" $ \metafile h -> do
     BL.hPut h $ encode [delete (Tag "SourceFile") m]
     hFlush h
-    void
-      <$> sendCommand
-        et
-        (into @Text fp : "-json=" <> into @Text metafile : options)
+    void <$> sendCommand et (pack fp : "-json=" <> pack metafile : options)
   where
     options = ["-overwrite_original", "-f"]
 
@@ -384,7 +381,7 @@ writeMetaEither et (Metadata m) fp =
 -- "Description)" m == get (Tag "description") m@.
 --
 -- @since 0.2.0.0
-get :: FromValue a => Tag -> Metadata -> Maybe a
+get :: (FromValue a) => Tag -> Metadata -> Maybe a
 get t (Metadata m) = do
   v <- m !? toLower t
   guard (v /= String "-") -- Marked for deletion, see del function below.
@@ -393,7 +390,7 @@ get t (Metadata m) = do
 -- | Set a tag to a (new) value. Tag case is ignored.
 --
 -- @since 0.2.0.0
-set :: ToValue a => Tag -> a -> Metadata -> Metadata
+set :: (ToValue a) => Tag -> a -> Metadata -> Metadata
 set t v (Metadata m) = Metadata $ insert (toLower t) (toValue v) m
 
 -- | Delete a tag (i.e., set its value to a marker that will make ExifTool
@@ -405,4 +402,4 @@ del t = set t (String "-")
 
 -- | Extract content from Right or throw error.
 eitherError :: Either Text a -> a
-eitherError = either (error . into @String) id
+eitherError = either (error . unpack) id
