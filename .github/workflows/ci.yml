@@ -4,18 +4,18 @@ on: workflow_dispatch
 
 jobs:
   build:
-    name: ${{ matrix.os }}, ghc ${{ matrix.ghc }}, cabal ${{ matrix.cabal }}
+    name: Build on ${{ matrix.os }} with GHC ${{ matrix.ghc }} and Cabal ${{ matrix.cabal }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        ghc: ["9.2.1"]
-        cabal: ["3.6"]
+        ghc: ["9.6"]
+        cabal: ["3.10"]
         include:
           - os: ubuntu-latest
-            ghc: "9.0.2"
+            ghc: "9.4"
           - os: ubuntu-latest
-            ghc: "8.10.7"
+            ghc: "9.2"
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
