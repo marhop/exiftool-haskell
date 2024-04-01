@@ -3,7 +3,7 @@
 
 -- |
 -- Module     : ExifTool
--- Copyright  : (c) Martin Hoppenheit 2020-2023
+-- Copyright  : (c) Martin Hoppenheit 2020-2024
 -- License    : MIT
 -- Maintainer : martin@hoppenheit.info
 --

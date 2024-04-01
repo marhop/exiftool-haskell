@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               exiftool
-version:            0.2.0.4
+version:            0.2.0.5
 synopsis:           Haskell bindings to ExifTool
 description:        Haskell bindings to the [ExifTool](https://exiftool.org)
                     command-line application that enable reading, writing and
@@ -10,9 +10,9 @@ license:            MIT
 license-file:       LICENSE
 author:             Martin Hoppenheit
 maintainer:         martin@hoppenheit.info
-copyright:          2020-2023 Martin Hoppenheit
+copyright:          2020-2024 Martin Hoppenheit
 category:           Foreign
-extra-source-files: README.md CHANGELOG.md
+extra-doc-files:    README.md CHANGELOG.md
 
 library
   hs-source-dirs:   lib
