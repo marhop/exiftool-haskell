@@ -81,9 +81,10 @@ import Data.Aeson
   )
 import qualified Data.Aeson as JSON
 import Data.Aeson.Encoding.Internal (bool, list, scientific, text)
+import Data.Base64.Types (extractBase64)
 import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
-import Data.ByteString.Base64 (decodeBase64, encodeBase64)
+import Data.ByteString.Base64 (decodeBase64Untyped, encodeBase64)
 import qualified Data.ByteString.Lazy as BL
 import Data.HashMap.Strict (HashMap, delete, insert, mapKeys, (!?))
 import Data.Hashable (Hashable)
@@ -173,7 +174,7 @@ instance FromJSON Value where
         either
           (fail . unpack)
           (pure . Binary)
-          (decodeBase64 $ encodeUtf8 b)
+          (decodeBase64Untyped $ encodeUtf8 b)
     | otherwise = pure $ String x
   parseJSON (JSON.Number x) = pure $ Number x
   parseJSON (JSON.Bool x) = pure $ Bool x
@@ -184,12 +185,12 @@ instance FromJSON Value where
 
 instance ToJSON Value where
   toJSON (String x) = JSON.String x
-  toJSON (Binary x) = JSON.String $ "base64:" <> encodeBase64 x
+  toJSON (Binary x) = JSON.String $ "base64:" <> extractBase64 (encodeBase64 x)
   toJSON (Number x) = JSON.Number x
   toJSON (Bool x) = JSON.Bool x
   toJSON (List xs) = JSON.Array . Vector.fromList $ map toJSON xs
   toEncoding (String x) = text x
-  toEncoding (Binary x) = text $ "base64:" <> encodeBase64 x
+  toEncoding (Binary x) = text $ "base64:" <> extractBase64 (encodeBase64 x)
   toEncoding (Number x) = scientific x
   toEncoding (Bool x) = bool x
   toEncoding (List xs) = list toEncoding xs
